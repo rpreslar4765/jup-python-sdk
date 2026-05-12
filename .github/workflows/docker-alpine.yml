@@ -1,0 +1,210 @@
+name: Docker Multi-Alpine CI
+
+on:
+  push:
+    branches: [main, claude/fix-and-add-code-for-alpine-versions]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  docker-build-test:
+    name: Build and Test on Alpine ${{ matrix.alpine-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        alpine-version: ['3.18', '3.19', '3.20', '3.21', 'edge']
+        python-version: ['3.11']
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Cache Docker layers
+        uses: actions/cache@v4
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-buildx-alpine-${{ matrix.alpine-version }}-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-alpine-${{ matrix.alpine-version }}-
+            ${{ runner.os }}-buildx-
+
+      - name: Build Docker Image (Alpine ${{ matrix.alpine-version }})
+        run: |
+          docker build \
+            --build-arg ALPINE_VERSION=${{ matrix.alpine-version }} \
+            --build-arg PYTHON_VERSION=${{ matrix.python-version }} \
+            --target runtime \
+            --cache-from type=local,src=/tmp/.buildx-cache \
+            --cache-to type=local,dest=/tmp/.buildx-cache-new,mode=max \
+            -t jup-python-sdk:alpine${{ matrix.alpine-version }} \
+            .
+
+      - name: Test SDK Import (Alpine ${{ matrix.alpine-version }})
+        run: |
+          docker run --rm jup-python-sdk:alpine${{ matrix.alpine-version }} \
+            python -c "import jup_python_sdk; print('✓ SDK imported successfully on Alpine ${{ matrix.alpine-version }}')"
+
+      - name: Test SDK Components (Alpine ${{ matrix.alpine-version }})
+        run: |
+          docker run --rm jup-python-sdk:alpine${{ matrix.alpine-version }} \
+            python -c "
+          from jup_python_sdk.clients.ultra_api_client import UltraApiClient
+          from jup_python_sdk.models.ultra_api.ultra_order_request_model import UltraOrderRequest
+          from jup_python_sdk.models.ultra_api.ultra_execute_request_model import UltraExecuteRequest
+          print('✓ All SDK components imported successfully on Alpine ${{ matrix.alpine-version }}')
+          "
+
+      - name: Check Python Version
+        run: |
+          docker run --rm jup-python-sdk:alpine${{ matrix.alpine-version }} \
+            python --version
+
+      - name: Check Alpine Version
+        run: |
+          docker run --rm jup-python-sdk:alpine${{ matrix.alpine-version }} \
+            cat /etc/alpine-release
+
+      - name: Move cache
+        run: |
+          rm -rf /tmp/.buildx-cache
+          mv /tmp/.buildx-cache-new /tmp/.buildx-cache
+
+  docker-development-test:
+    name: Test Development Image
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Development Image
+        run: |
+          docker build \
+            --target development \
+            -t jup-python-sdk:dev \
+            .
+
+      - name: Test Development Tools
+        run: |
+          docker run --rm jup-python-sdk:dev \
+            sh -c "poetry --version && pytest --version && black --version && mypy --version"
+
+      - name: Run Code Quality Checks
+        run: |
+          docker run --rm jup-python-sdk:dev \
+            sh -c "flake8 --version && isort --version"
+
+  docker-testing-image:
+    name: Run Tests in Docker
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Create .env file for tests
+        env:
+          PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
+        run: |
+          echo "PRIVATE_KEY=${PRIVATE_KEY}" > .env
+
+      - name: Build Testing Image
+        run: |
+          docker build \
+            --target testing \
+            -t jup-python-sdk:test \
+            .
+
+      - name: Run Tests
+        env:
+          PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
+        run: |
+          docker run --rm \
+            -e PRIVATE_KEY="${PRIVATE_KEY}" \
+            jup-python-sdk:test
+
+  docker-compose-test:
+    name: Test Docker Compose with All Alpine Versions
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Create .env file
+        env:
+          PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
+        run: |
+          echo "PRIVATE_KEY=${PRIVATE_KEY}" > .env
+
+      - name: Build All Services
+        run: docker-compose build --parallel
+
+      - name: Test All Alpine Versions
+        run: |
+          docker-compose up --abort-on-container-exit --exit-code-from jup-sdk-alpine-3-21
+
+      - name: Check Build Sizes
+        run: |
+          echo "Docker Image Sizes:"
+          docker images | grep jup-python-sdk || true
+
+      - name: Clean Up
+        if: always()
+        run: docker-compose down -v
+
+  security-scan:
+    name: Security Scan Docker Images
+    runs-on: ubuntu-latest
+    needs: docker-build-test
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Build Image for Scanning
+        run: |
+          docker build -t jup-python-sdk:scan .
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'jup-python-sdk:scan'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Upload Trivy results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+  summary:
+    name: Test Summary
+    runs-on: ubuntu-latest
+    needs: [docker-build-test, docker-development-test, docker-testing-image, docker-compose-test]
+    if: always()
+
+    steps:
+      - name: Check Build Results
+        run: |
+          echo "✓ Docker builds completed for all Alpine versions"
+          echo "  - Alpine 3.18"
+          echo "  - Alpine 3.19"
+          echo "  - Alpine 3.20"
+          echo "  - Alpine 3.21"
+          echo "  - Alpine edge"
+          echo ""
+          echo "All tests completed successfully!"

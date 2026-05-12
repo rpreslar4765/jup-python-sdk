@@ -1,0 +1,191 @@
+version: '3.9'
+
+services:
+  # Alpine 3.18 - Stable release
+  jup-sdk-alpine-3-18:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        ALPINE_VERSION: "3.18"
+        PYTHON_VERSION: "3.11"
+      target: runtime
+    image: jup-python-sdk:alpine3.18
+    container_name: jup-sdk-alpine-3.18
+    env_file:
+      - .env
+    environment:
+      - ALPINE_VERSION=3.18
+    volumes:
+      - ./examples:/app/examples:ro
+    command: python --version && python -c "import jup_python_sdk; print('SDK loaded successfully on Alpine 3.18')"
+    networks:
+      - jup-network
+
+  # Alpine 3.19 - Stable release
+  jup-sdk-alpine-3-19:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        ALPINE_VERSION: "3.19"
+        PYTHON_VERSION: "3.11"
+      target: runtime
+    image: jup-python-sdk:alpine3.19
+    container_name: jup-sdk-alpine-3.19
+    env_file:
+      - .env
+    environment:
+      - ALPINE_VERSION=3.19
+    volumes:
+      - ./examples:/app/examples:ro
+    command: python --version && python -c "import jup_python_sdk; print('SDK loaded successfully on Alpine 3.19')"
+    networks:
+      - jup-network
+
+  # Alpine 3.20 - Stable release
+  jup-sdk-alpine-3-20:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        ALPINE_VERSION: "3.20"
+        PYTHON_VERSION: "3.11"
+      target: runtime
+    image: jup-python-sdk:alpine3.20
+    container_name: jup-sdk-alpine-3.20
+    env_file:
+      - .env
+    environment:
+      - ALPINE_VERSION=3.20
+    volumes:
+      - ./examples:/app/examples:ro
+    command: python --version && python -c "import jup_python_sdk; print('SDK loaded successfully on Alpine 3.20')"
+    networks:
+      - jup-network
+
+  # Alpine 3.21 - Latest stable release (default)
+  jup-sdk-alpine-3-21:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        ALPINE_VERSION: "3.21"
+        PYTHON_VERSION: "3.11"
+      target: runtime
+    image: jup-python-sdk:alpine3.21
+    container_name: jup-sdk-alpine-3.21
+    env_file:
+      - .env
+    environment:
+      - ALPINE_VERSION=3.21
+    volumes:
+      - ./examples:/app/examples:ro
+    command: python --version && python -c "import jup_python_sdk; print('SDK loaded successfully on Alpine 3.21')"
+    networks:
+      - jup-network
+
+  # Alpine edge - Rolling release (latest development)
+  jup-sdk-alpine-edge:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        ALPINE_VERSION: "edge"
+        PYTHON_VERSION: "3.11"
+      target: runtime
+    image: jup-python-sdk:alpine-edge
+    container_name: jup-sdk-alpine-edge
+    env_file:
+      - .env
+    environment:
+      - ALPINE_VERSION=edge
+    volumes:
+      - ./examples:/app/examples:ro
+    command: python --version && python -c "import jup_python_sdk; print('SDK loaded successfully on Alpine edge')"
+    networks:
+      - jup-network
+
+  # Development environment (default: Alpine 3.21)
+  jup-sdk-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        ALPINE_VERSION: "3.21"
+        PYTHON_VERSION: "3.11"
+      target: development
+    image: jup-python-sdk:dev
+    container_name: jup-sdk-dev
+    env_file:
+      - .env
+    volumes:
+      - .:/app:delegated
+      - python-packages:/usr/local/lib/python3.11/site-packages
+    working_dir: /app
+    stdin_open: true
+    tty: true
+    command: sh
+    networks:
+      - jup-network
+
+  # Testing environment with all Alpine versions
+  jup-sdk-test:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        ALPINE_VERSION: "3.21"
+        PYTHON_VERSION: "3.11"
+      target: testing
+    image: jup-python-sdk:test
+    container_name: jup-sdk-test
+    env_file:
+      - .env
+    volumes:
+      - .:/app:delegated
+      - test-results:/app/test-results
+    command: poetry run pytest --cov=jup_python_sdk --cov-report=html:/app/test-results/coverage -v
+    networks:
+      - jup-network
+
+networks:
+  jup-network:
+    driver: bridge
+
+volumes:
+  python-packages:
+  test-results:
+
+# ===========================================================================
+# Usage instructions:
+# ===========================================================================
+#
+# Build all Alpine versions:
+#   docker-compose build
+#
+# Build specific version:
+#   docker-compose build jup-sdk-alpine-3-21
+#
+# Run all versions (test SDK loading):
+#   docker-compose up
+#
+# Run specific version:
+#   docker-compose up jup-sdk-alpine-3-21
+#
+# Start development environment:
+#   docker-compose up -d jup-sdk-dev
+#   docker-compose exec jup-sdk-dev sh
+#
+# Run tests:
+#   docker-compose up jup-sdk-test
+#
+# Run example on specific Alpine version:
+#   docker-compose run jup-sdk-alpine-3-21 python examples/balances/main.py
+#
+# Clean up:
+#   docker-compose down -v
+#
+# Rebuild without cache:
+#   docker-compose build --no-cache
+# ===========================================================================
