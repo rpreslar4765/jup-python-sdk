@@ -10,9 +10,10 @@ ARG PYTHON_VERSION=3.11
 # ============================================================================
 FROM python:${PYTHON_VERSION}-alpine${ALPINE_VERSION} AS builder
 
-# Install build dependencies required for Python packages with C extensions
-# These are needed for solders, solana, and other cryptographic libraries
-RUN apk add --no-cache \
+# Update package index and install build dependencies
+# Required for Python packages with C extensions (solders, solana, etc.)
+RUN apk update && \
+    apk add --no-cache \
     gcc \
     g++ \
     musl-dev \
@@ -23,7 +24,8 @@ RUN apk add --no-cache \
     rust \
     make \
     cmake \
-    git
+    git \
+    && rm -rf /var/cache/apk/*
 
 # Set up Python environment
 ENV PYTHONUNBUFFERED=1 \
@@ -58,11 +60,13 @@ RUN poetry install --only-root --no-interaction --no-ansi
 FROM python:${PYTHON_VERSION}-alpine${ALPINE_VERSION} AS runtime
 
 # Install only runtime dependencies
-RUN apk add --no-cache \
+RUN apk update && \
+    apk add --no-cache \
     libgcc \
     libstdc++ \
     libffi \
-    openssl
+    openssl \
+    && rm -rf /var/cache/apk/*
 
 # Create non-root user for security
 RUN addgroup -g 1000 jupuser && \
@@ -101,11 +105,13 @@ FROM builder AS development
 RUN poetry install --with dev --no-interaction --no-ansi
 
 # Install additional development tools
-RUN apk add --no-cache \
+RUN apk update && \
+    apk add --no-cache \
     bash \
     vim \
     curl \
-    jq
+    jq \
+    && rm -rf /var/cache/apk/*
 
 WORKDIR /app
 
