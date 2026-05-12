@@ -85,7 +85,7 @@ Before using the SDK, please ensure you have completed the following steps:
      ```
      This tells the SDK to read your private key from the environment variable you want.
 
-   - **Using an API Key for Enhanced Access:**  
+   - **Using an API Key for Enhanced Access:**
      If you have an API key from [the Jupiter Portal](https://portal.jup.ag/onboard), you can pass it directly when creating the client:
      ```python
      from jup_python_sdk.clients.ultra_api_client import UltraApiClient
@@ -93,6 +93,43 @@ Before using the SDK, please ensure you have completed the following steps:
      client = UltraApiClient(api_key="YOUR_API_KEY")
      ```
      When you supply an API key, the library will call the `https://api.jup.ag/` API rather than the default `https://lite-api.jup.ag/` API.
+
+## **Docker Support**
+
+The SDK includes comprehensive Docker support with Alpine Linux for lightweight, secure containerized deployments.
+
+### **Supported Alpine Versions**
+- Alpine 3.18, 3.19, 3.20, 3.21 (default), and edge
+
+### **Quick Start with Docker**
+
+```bash
+# Build the image
+docker build -t jup-python-sdk .
+
+# Run with environment file
+echo "PRIVATE_KEY=your_base58_private_key_here" > .env
+docker run -it --env-file .env jup-python-sdk
+
+# Run an example
+docker run --rm --env-file .env jup-python-sdk python examples/balances/main.py
+```
+
+### **Using Docker Compose**
+
+```bash
+# Build all Alpine versions
+docker-compose build
+
+# Test all versions
+docker-compose up
+
+# Start development environment
+docker-compose up -d jup-sdk-dev
+docker-compose exec jup-sdk-dev sh
+```
+
+For comprehensive Docker documentation, see [DOCKER.md](./DOCKER.md).
 
 ## **Disclaimer**
 
