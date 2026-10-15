@@ -1,37 +1,28 @@
-from dotenv import load_dotenv
+import httpx
+import pytest
 
 from jup_python_sdk.clients.ultra_api_client import UltraApiClient
 
 
-def test_ultra_shield() -> None:
-    """
-    Test the UltraApiClient shield method.
-    """
-    load_dotenv()
-    client = UltraApiClient()
+@pytest.mark.parametrize("status", [200, 429, 500])
+def test_shield(status):
+    payload = {"warnings": {}}
 
-    # WSOL and USDC mints
-    wsol_mint = "So11111111111111111111111111111111111111112"
-    usdc_mint = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
+    def handler(request):
+        assert request.method == "GET"
+        assert request.url.path == "/ultra/v1/shield"
+        assert request.headers["x-api-key"] == "test-api-key"
+        assert request.url.params["mints"] == "mint-a,mint-b"
+        return httpx.Response(status, json=payload)
 
+    client = UltraApiClient(api_key="test-api-key")
+    client.client.close()
+    client.client = httpx.Client(transport=httpx.MockTransport(handler))
     try:
-        shield_response = client.shield(mints=[wsol_mint, usdc_mint])
-        assert (
-            "warnings" in shield_response
-        ), "Response does not contain 'warnings' key."
-
-        print()
-        print("Shield API Response:")
-        if shield_response["warnings"]:
-            for mint, warnings in shield_response["warnings"].items():
-                print(f"Mint: {mint}")
-                for warning in warnings:
-                    print(f"  - Type: {warning.get('type')}")
-                    print(f"    Message: {warning.get('message')}")
+        if status == 200:
+            assert client.shield(["mint-a", "mint-b"]) == payload
         else:
-            print("No warnings returned for provided mints")
-
-    except Exception as e:
-        print("Error occurred while fetching shield information:", str(e))
+            with pytest.raises(httpx.HTTPStatusError):
+                client.shield(["mint-a", "mint-b"])
     finally:
         client.close()

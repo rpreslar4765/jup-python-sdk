@@ -1,33 +1,27 @@
-from dotenv import load_dotenv
+import httpx
+import pytest
 
 from jup_python_sdk.clients.ultra_api_client import UltraApiClient
 
 
-def test_ultra_get_balances() -> None:
-    """
-    Test the UltraApiClient balances method.
-    """
-    load_dotenv()
-    client = UltraApiClient()
+@pytest.mark.parametrize("status", [200, 429, 500])
+def test_balances(status):
+    payload = {"SOL": {"amount": "42"}}
 
-    address = client._get_public_key()
+    def handler(request):
+        assert request.method == "GET"
+        assert request.url.path == "/ultra/v1/balances/wallet"
+        assert request.headers["x-api-key"] == "test-api-key"
+        return httpx.Response(status, json=payload)
 
+    client = UltraApiClient(api_key="test-api-key")
+    client.client.close()
+    client.client = httpx.Client(transport=httpx.MockTransport(handler))
     try:
-        balances_response = client.balances(str(address))
-        assert (
-            "SOL" in balances_response
-        ), "Response does not contain 'SOL' key."
-
-        print()
-        print("Balances API Response:")
-        for token, details in balances_response.items():
-            print(f"Token: {token}")
-            print(f"  - Amount: {details['amount']}")
-            print(f"    UI Amount: {details['uiAmount']}")
-            print(f"    Slot: {details['slot']}")
-            print(f"    Is Frozen: {details['isFrozen']}")
-
-    except Exception as e:
-        print("Error occurred while fetching balances:", str(e))
+        if status == 200:
+            assert client.balances("wallet") == payload
+        else:
+            with pytest.raises(httpx.HTTPStatusError):
+                client.balances("wallet")
     finally:
         client.close()
